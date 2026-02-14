@@ -8,6 +8,30 @@ set -euo pipefail
 VERSION="0.1.0"
 PROGRAM_NAME="gsd"
 
+# ── Storage ──────────────────────────────────────────────────────────────
+
+DATA_DIR="${GSD_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/gsd}"
+TASK_FILE="$DATA_DIR/tasks.tsv"
+
+init_storage() {
+  if [[ ! -d "$DATA_DIR" ]]; then
+    mkdir -p "$DATA_DIR"
+  fi
+  if [[ ! -f "$TASK_FILE" ]]; then
+    touch "$TASK_FILE"
+  fi
+}
+
+next_id() {
+  if [[ ! -s "$TASK_FILE" ]]; then
+    echo 1
+  else
+    local max_id
+    max_id=$(cut -f1 "$TASK_FILE" | sort -n | tail -1)
+    echo $((max_id + 1))
+  fi
+}
+
 # ── Help ─────────────────────────────────────────────────────────────────
 
 show_help() {
@@ -138,6 +162,150 @@ show_command_help() {
   esac
 }
 
+# ── Commands ─────────────────────────────────────────────────────────────
+
+cmd_add() {
+  local description="${1:-}"
+  if [[ -z "$description" ]]; then
+    echo "Error: task description is required."
+    echo "Usage: $PROGRAM_NAME add <description>"
+    exit 1
+  fi
+  init_storage
+  local id
+  id=$(next_id)
+  printf '%d\tpending\t%s\n' "$id" "$description" >> "$TASK_FILE"
+  echo "Added task $id: $description"
+}
+
+cmd_list() {
+  local filter="${1:-all}"
+  init_storage
+
+  if [[ ! -s "$TASK_FILE" ]]; then
+    echo "No tasks yet. Add one with '$PROGRAM_NAME add <description>'."
+    return
+  fi
+
+  local found=0
+  while IFS=$'\t' read -r id status description; do
+    case "$filter" in
+      --pending) [[ "$status" != "pending" ]] && continue ;;
+      --done)    [[ "$status" != "done" ]] && continue ;;
+      --all|all) ;;
+      *)
+        echo "Unknown filter: $filter"
+        echo "Usage: $PROGRAM_NAME list [--all|--pending|--done]"
+        exit 1
+        ;;
+    esac
+    local marker="[ ]"
+    [[ "$status" == "done" ]] && marker="[x]"
+    printf '  %s %d: %s\n' "$marker" "$id" "$description"
+    found=1
+  done < "$TASK_FILE"
+
+  if [[ "$found" -eq 0 ]]; then
+    echo "No tasks match the filter '$filter'."
+  fi
+}
+
+cmd_done() {
+  local target="${1:-}"
+  if [[ -z "$target" ]]; then
+    echo "Error: task number is required."
+    echo "Usage: $PROGRAM_NAME done <task-number>"
+    exit 1
+  fi
+  if ! [[ "$target" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$target' is not a valid task number."
+    exit 1
+  fi
+  init_storage
+
+  local found=0
+  local tmpfile
+  tmpfile=$(mktemp)
+  while IFS=$'\t' read -r id status description; do
+    if [[ "$id" -eq "$target" ]]; then
+      if [[ "$status" == "done" ]]; then
+        echo "Task $id is already marked as done."
+        printf '%d\t%s\t%s\n' "$id" "$status" "$description" >> "$tmpfile"
+      else
+        printf '%d\tdone\t%s\n' "$id" "$description" >> "$tmpfile"
+        echo "Completed task $id: $description"
+      fi
+      found=1
+    else
+      printf '%d\t%s\t%s\n' "$id" "$status" "$description" >> "$tmpfile"
+    fi
+  done < "$TASK_FILE"
+
+  if [[ "$found" -eq 0 ]]; then
+    echo "Error: no task with number $target."
+    rm -f "$tmpfile"
+    exit 1
+  fi
+  mv "$tmpfile" "$TASK_FILE"
+}
+
+cmd_remove() {
+  local target="${1:-}"
+  if [[ -z "$target" ]]; then
+    echo "Error: task number is required."
+    echo "Usage: $PROGRAM_NAME remove <task-number>"
+    exit 1
+  fi
+  if ! [[ "$target" =~ ^[0-9]+$ ]]; then
+    echo "Error: '$target' is not a valid task number."
+    exit 1
+  fi
+  init_storage
+
+  local found=0
+  local tmpfile
+  tmpfile=$(mktemp)
+  while IFS=$'\t' read -r id status description; do
+    if [[ "$id" -eq "$target" ]]; then
+      echo "Removed task $id: $description"
+      found=1
+    else
+      printf '%d\t%s\t%s\n' "$id" "$status" "$description" >> "$tmpfile"
+    fi
+  done < "$TASK_FILE"
+
+  if [[ "$found" -eq 0 ]]; then
+    echo "Error: no task with number $target."
+    rm -f "$tmpfile"
+    exit 1
+  fi
+  mv "$tmpfile" "$TASK_FILE"
+}
+
+cmd_status() {
+  init_storage
+
+  if [[ ! -s "$TASK_FILE" ]]; then
+    echo "No tasks yet. Add one with '$PROGRAM_NAME add <description>'."
+    return
+  fi
+
+  local total=0 pending=0 done=0
+  while IFS=$'\t' read -r _ status _; do
+    total=$((total + 1))
+    case "$status" in
+      pending) pending=$((pending + 1)) ;;
+      done)    done=$((done + 1)) ;;
+    esac
+  done < "$TASK_FILE"
+
+  echo "Tasks: $total total, $pending pending, $done done"
+  if [[ "$total" -gt 0 ]]; then
+    local pct=$((done * 100 / total))
+    echo "Progress: $pct% complete"
+  fi
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 main() {
@@ -151,8 +319,27 @@ main() {
     version|-v|--version)
       show_version
       ;;
+    add)
+      shift
+      cmd_add "${1:-}"
+      ;;
+    list)
+      shift
+      cmd_list "${1:-all}"
+      ;;
+    done)
+      shift
+      cmd_done "${1:-}"
+      ;;
+    remove)
+      shift
+      cmd_remove "${1:-}"
+      ;;
+    status)
+      cmd_status
+      ;;
     *)
-      echo "Command '$cmd' is not yet implemented."
+      echo "Unknown command: $cmd"
       echo "Run '$PROGRAM_NAME help' for usage information."
       exit 1
       ;;
