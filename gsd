@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+#
+# gsd - Get Stuff Done
+# A simple task management CLI tool.
+
+set -euo pipefail
+
+VERSION="0.1.0"
+PROGRAM_NAME="gsd"
+
+# ── Help ─────────────────────────────────────────────────────────────────
+
+show_help() {
+  cat <<EOF
+$PROGRAM_NAME $VERSION - Get Stuff Done
+
+Usage:
+  $PROGRAM_NAME <command> [options]
+
+Commands:
+  help        Show this help message
+  version     Show version information
+  add         Add a new task
+  list        List all tasks
+  done        Mark a task as completed
+  remove      Remove a task
+  status      Show a summary of tasks
+
+Options:
+  -h, --help      Show this help message
+  -v, --version   Show version information
+
+Examples:
+  $PROGRAM_NAME add "Write unit tests"
+  $PROGRAM_NAME list
+  $PROGRAM_NAME done 1
+  $PROGRAM_NAME remove 3
+  $PROGRAM_NAME status
+
+Run '$PROGRAM_NAME help <command>' for more information on a specific command.
+EOF
+}
+
+show_help_add() {
+  cat <<EOF
+Usage: $PROGRAM_NAME add <description>
+
+Add a new task to your list.
+
+Arguments:
+  description   A short description of the task
+
+Examples:
+  $PROGRAM_NAME add "Write unit tests"
+  $PROGRAM_NAME add "Review pull request #42"
+EOF
+}
+
+show_help_list() {
+  cat <<EOF
+Usage: $PROGRAM_NAME list [options]
+
+List all tasks.
+
+Options:
+  --all         Show all tasks including completed (default)
+  --pending     Show only pending tasks
+  --done        Show only completed tasks
+
+Examples:
+  $PROGRAM_NAME list
+  $PROGRAM_NAME list --pending
+  $PROGRAM_NAME list --done
+EOF
+}
+
+show_help_done() {
+  cat <<EOF
+Usage: $PROGRAM_NAME done <task-number>
+
+Mark a task as completed.
+
+Arguments:
+  task-number   The number of the task to mark as done (from 'gsd list')
+
+Examples:
+  $PROGRAM_NAME done 1
+  $PROGRAM_NAME done 3
+EOF
+}
+
+show_help_remove() {
+  cat <<EOF
+Usage: $PROGRAM_NAME remove <task-number>
+
+Remove a task from the list entirely.
+
+Arguments:
+  task-number   The number of the task to remove (from 'gsd list')
+
+Examples:
+  $PROGRAM_NAME remove 1
+  $PROGRAM_NAME remove 3
+EOF
+}
+
+show_help_status() {
+  cat <<EOF
+Usage: $PROGRAM_NAME status
+
+Show a summary of your tasks including counts of pending and completed items.
+
+Examples:
+  $PROGRAM_NAME status
+EOF
+}
+
+show_version() {
+  echo "$PROGRAM_NAME $VERSION"
+}
+
+# ── Command-specific help router ─────────────────────────────────────────
+
+show_command_help() {
+  local cmd="${1:-}"
+  case "$cmd" in
+    add)    show_help_add ;;
+    list)   show_help_list ;;
+    done)   show_help_done ;;
+    remove) show_help_remove ;;
+    status) show_help_status ;;
+    "")     show_help ;;
+    *)
+      echo "Unknown command: $cmd"
+      echo "Run '$PROGRAM_NAME help' to see available commands."
+      exit 1
+      ;;
+  esac
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────
+
+main() {
+  local cmd="${1:-help}"
+
+  case "$cmd" in
+    help|-h|--help)
+      shift || true
+      show_command_help "${1:-}"
+      ;;
+    version|-v|--version)
+      show_version
+      ;;
+    *)
+      echo "Command '$cmd' is not yet implemented."
+      echo "Run '$PROGRAM_NAME help' for usage information."
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
