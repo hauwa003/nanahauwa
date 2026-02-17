@@ -1,0 +1,20 @@
+{
+  "name": "nanahauwa",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:50703/git/hauwa003/nanahauwa"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dialkit": "^0.2.1",
+    "motion": "^12.34.0"
+  }
+}
